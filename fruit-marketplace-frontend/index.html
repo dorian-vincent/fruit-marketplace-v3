@@ -1,0 +1,460 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Fruit Marketplace</title>
+</head>
+<body>
+  <h1>Fruit Marketplace 🍎</h1>
+
+  <!-- Connexion à MetaMask -->
+  <button onclick="connectWallet()">Se connecter à MetaMask</button>
+  <p id="account">Compte : non connecté</p>
+
+  <!-- Interaction -->
+  <h2>Ajouter un fruit</h2>
+  <input type="text" id="fruitName" placeholder="Nom du fruit">
+  <input type="number" id="fruitPrice" placeholder="Prix en wei">
+  <button onclick="listFruit()">Lister</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+  <script>
+    let provider;
+    let signer;
+    let contract;
+
+    // Adresse de ton contrat et ABI
+    const contractAddress = "ADRESSE_DU_CONTRAT_ICI"; // remplace ça
+    const abi = [
+    {
+      "inputs": [],
+      "name": "ReentrancyGuardReentrantCall",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "ExcessAmountRefunded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "fruitId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "price",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        }
+      ],
+      "name": "FruitListed",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "fruitId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "price",
+          "type": "uint256"
+        }
+      ],
+      "name": "FruitPurchased",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "fruitId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        }
+      ],
+      "name": "FruitRemoved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "fruitId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newPrice",
+          "type": "uint256"
+        }
+      ],
+      "name": "FruitUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "rater",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "rating",
+          "type": "uint256"
+        }
+      ],
+      "name": "SellerRated",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_id",
+          "type": "uint256"
+        }
+      ],
+      "name": "buyFruit",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "fruitCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "fruits",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "fruitId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "price",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address payable",
+          "name": "seller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "bool",
+          "name": "isAvailable",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_fruitId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getFruit",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "fruitId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "price",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "isAvailable",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_seller",
+          "type": "address"
+        }
+      ],
+      "name": "getSellerAverageRating",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_name",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_price",
+          "type": "uint256"
+        }
+      ],
+      "name": "listFruit",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_seller",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_rating",
+          "type": "uint256"
+        }
+      ],
+      "name": "rateSeller",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_id",
+          "type": "uint256"
+        }
+      ],
+      "name": "removeFruit",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "sellerRatings",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "sellerRatingsCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_id",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_newPrice",
+          "type": "uint256"
+        }
+      ],
+      "name": "updateFruitPrice",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ];
+
+    async function connectWallet() {
+      if (window.ethereum) {
+        try {
+          provider = new ethers.BrowserProvider(window.ethereum);
+          signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          document.getElementById("account").innerText = "Compte : " + address;
+
+          contract = new ethers.Contract(contractAddress, abi, signer);
+
+          console.log("Contrat initialisé avec l'adresse :", contractAddress);
+        } catch (error) {
+          console.error("Erreur de connexion à MetaMask :", error);
+        }
+      } else {
+        alert("MetaMask n'est pas installé !");
+      }
+    } 
+
+
+    async function listFruit() {
+      if (!contract) {
+        alert("Veuillez d'abord vous connecter à MetaMask.");
+        return;
+      }
+
+      const name = document.getElementById("fruitName").value;
+      const price = document.getElementById("fruitPrice").value;
+
+      if (!name || !price || isNaN(price)) {
+        alert("Veuillez remplir correctement les champs.");
+        return;
+      }
+
+      try {
+        const tx = await contract.listFruit(name, price);
+        await tx.wait(); // attendre que la transaction soit confirmée
+        alert("Fruit listé avec succès !");
+      } catch (error) {
+        console.error("Erreur lors de la mise en vente :", error);
+        alert("Erreur lors de la mise en vente.");
+      }
+    }
+
+  </script>
+</body>
+</html>
+
